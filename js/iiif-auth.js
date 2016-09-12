@@ -3,10 +3,10 @@
 var currentService;
 
 function displayOpenSeadragon(tilesource) {
-    $('#image').html("<div id='openseadragon' style='width:400px; height:400px'></div>");
+    $('#image').html("<div id='openseadragon' style='width:500px; height:500px'></div>");
     var viewer = OpenSeadragon({
         id: "openseadragon",
-        prefixUrl: "/riiif-auth-viewer/openseadragon/images/",
+        prefixUrl: "openseadragon/images/",
         tileSources: [ tilesource ]
     });
     logit("Created OpenSeadragon", tilesource['@id']);
