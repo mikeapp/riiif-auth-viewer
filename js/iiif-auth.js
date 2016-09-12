@@ -29,18 +29,18 @@ function logjson(json) {
 
 
 function fetchInfo(uri, bearerToken, success, failure) {
-    headers = null;
+    var params = {
+        url: uri,
+        type: "GET",
+        dataType: 'json'
+    };
     if (bearerToken) {
         headers = [];
         headers['Authorization'] = "Bearer " + bearerToken;
+        params['headers'] = headers;
     }
     $.ajax(
-        {
-            url: uri,
-            type: "GET",
-            dataType: 'json',
-            headers: headers
-        }
+        params
     ).done(success).fail(failure);
 }
 
@@ -69,18 +69,21 @@ function getTokenService(authService) {
 
 function openLoginWindow() {
     var w = window.open(currentService['authService']['@id']);
-    $(w).on("unload",
+    var popupchecker = window.setInterval(
       function() {
-          continueAuthFlowAfterLogin();
-      }
+          if (w.closed !== false) {
+              window.clearInterval(popupchecker);
+              continueAuthFlowAfterLogin();
+          }
+      }, 200
     );
 }
 
 function beginAuthFlow(image_id, imageInfo) {
     var authService = getAuthService(imageInfo);
     var tokenService = getTokenService(authService);
-    logit("Authentication service", authService['@id']);
-    logit('Token service', tokenService['@id']);
+    logit("Identified Login service", authService['@id']);
+    logit('Identified Token service', tokenService['@id']);
     currentService = {
         authService: authService,
         tokenService: tokenService,
@@ -106,22 +109,22 @@ function continueAuthFlowAfterToken() {
     var firstReturnedImage = imageInfo['@id'];
     var token = currentService['token'];
 
-    fetchInfo(originalImage + "/info.json",
+    fetchInfo(originalImage,
         token,
         function(json) {
             logjson(json);
-            var secondReturnedImage = json['@id'];
+            var secondReturnedImage = json['@id'] + '/info.json';
             if (firstReturnedImage == secondReturnedImage) {
-                logit("Same imageId returned after auth, no further action possible", secondReturnedImage);
+                logit("Same image @id returned after authentication, no further action possible, use degraded image", secondReturnedImage);
             } else if (secondReturnedImage == originalImage) {
-                logit("Success! Retrieved desired image after auth.", secondReturnedImage);
+                logit("Retrieved image originally requested", secondReturnedImage);
                 displayOpenSeadragon(json);
             } else {
-                logit("New image encountered, retry.", secondReturnedImage);
+                logit("New image @id encountered, retry", secondReturnedImage);
             }
         },
         function(xhr, status, error) {
-            logit("AJAX failure (" + status +")", xhr);
+            logit("Failure (" + status +")", xhr);
 
         }
     );
@@ -129,33 +132,36 @@ function continueAuthFlowAfterToken() {
 
 
 function showTestImage() {
-    var image_id = "http://images.iiif-auth.mikeapps.me/image-service/b16d987c-94de-4b9b-8a3a-588310b9ee9d-3";
+    window.addEventListener("message", receive_message);
+    var image_id = "http://images.iiif-auth.mikeapps.me/image-service/b16d987c-94de-4b9b-8a3a-588310b9ee9d-3/info.json";
+    logit('Intitial request for IIIF image', image_id);
     fetchInfo(image_id,
         null,
         function(json) {
             displayOpenSeadragon(json);  // may be the degraded image
             logjson(json);
             if (json['@id'] != image_id) {
-                logit("Found new @id, auth required", json['@id']);
+                logit("Found image with new @id, this is a degraded image", json['@id']);
                 beginAuthFlow(image_id, json);
             }
         },
         function(xhr, status, error) {
-            log("AJAX failure (" + status +")", error);
+            console.log(xhr);
+            logit("AJAX failure (" + status +")", error);
 
         }
     );
 }
 
-window.addEventListener("message", receive_message);
+
 
 function receive_message(event) {
     data = event.data;
-    logit("Message received", data);
+    logit("PostMessage received", data);
     var token, error;
     if (data.hasOwnProperty('accessToken')) {
         token = data.accessToken;
-        logit("Token received", token);
+        logit("Auth token received in PostMessage", token);
         currentService['token'] = token;
         continueAuthFlowAfterToken();
     } else {
